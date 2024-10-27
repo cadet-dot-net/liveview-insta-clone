@@ -1,16 +1,21 @@
 defmodule FinstaWeb.HomeLive do
   use FinstaWeb, :live_view
   alias Finsta.Posts.Post
+  alias Finsta.Posts
   
   @impl true
   def render(assigns) do
     ~H"""
     <h1 class="test-2x1">Finsta</h1>
-    <.simple_form for={@form} phx-change="validate" phx-submit="save-post">
-      <.live_file_input upload={@uploads.image} required />
-      <.input field={@form[:caption]} type="textarea" label="Caption" required />
-      <.button type="submit" phx-disable-with="Saving...">Create Post</.button>
-    </.simple_form>
+    <.button type="button" phx-click={show_modal("new-post-modal")}>Create Post</.button>
+    
+    <.modal id="new-post-modal">
+      <.simple_form for={@form} phx-change="validate" phx-submit="save-post">
+        <.live_file_input upload={@uploads.image} required />
+        <.input field={@form[:caption]} type="textarea" label="Caption" required />
+        <.button type="submit" phx-disable-with="Saving...">Create Post</.button>
+      </.simple_form>
+    </.modal>
     """
   end
   
@@ -35,7 +40,35 @@ defmodule FinstaWeb.HomeLive do
   end
   
   @impl true
-  def handle_event("save-post", _unsigned_params, socket) do
-    {:noreply, socket}
+  def handle_event("save-post", %{"post" => post_params}, socket) do
+    %{current_user: user} = socket.assigns
+    
+    post_params
+    |> Map.merge(%{
+      "user_id" => user.id,
+      "image_path" => List.first(consume_files(socket))
+    })
+    |> Posts.save()
+    |> case do
+      {:ok, _post} -> 
+        socket = 
+          socket
+          |> put_flash(:info, "Post created successfully!")
+          |> push_navigate(to: ~p"/home")
+          
+        {:noreply, socket}
+        
+      {:error, _changeset} ->
+        {:noreply, socket}
+    end
+  end
+  
+  defp consume_files(socket) do
+    consume_uploaded_entries(socket, :image, fn %{path: path}, _entry ->
+      dest = Path.join("priv/static/uploads", Path.basename(path))
+      File.cp!(path, dest)
+      
+      {:postpone, ~p"/uploads/#{Path.basename(dest)}"}
+    end)
   end
 end
