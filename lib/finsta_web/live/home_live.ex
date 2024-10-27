@@ -4,10 +4,24 @@ defmodule FinstaWeb.HomeLive do
   alias Finsta.Posts
   
   @impl true
+  def render(%{loading: true} = assigns) do
+    ~H"""
+    Finsta is loading...
+    """
+  end
+  
   def render(assigns) do
     ~H"""
     <h1 class="test-2x1">Finsta</h1>
     <.button type="button" phx-click={show_modal("new-post-modal")}>Create Post</.button>
+    
+    <div id="feed" phx-update="stream" class="flex flex-col gap-2">
+      <div :for={{dom_id, post} <- @streams.posts} id={dom_id} class="w-1/2 mx-auto flex flex-col gap-2 p-4 border rounded">
+        <img src={post.image_path} />
+        <p><%= post.user.email %></p>
+        <p><%= post.caption %></p>
+      </div>
+    </div>
     
     <.modal id="new-post-modal">
       <.simple_form for={@form} phx-change="validate" phx-submit="save-post">
@@ -21,17 +35,22 @@ defmodule FinstaWeb.HomeLive do
   
   @impl true
   def mount(_params, _session, socket) do
-    form =
-      %Post{}
-      |> Post.changeset(%{})
-      |> to_form(as: "post")
-      
-    socket = 
-      socket
-      |> assign(form: form)
-      |> allow_upload(:image, accept: ~w(.png .jpg), max_entries: 1)
-    
-    {:ok, socket}
+    if connected?(socket) do
+      form =
+        %Post{}
+        |> Post.changeset(%{})
+        |> to_form(as: "post")
+        
+      socket = 
+        socket
+        |> assign(form: form, loading: false)
+        |> allow_upload(:image, accept: ~w(.png .jpg), max_entries: 1)
+        |> stream(:posts, Posts.list_posts())
+        
+      {:ok, socket}
+    else
+      {:ok, assign(socket, loading: true)}
+    end
   end
   
   @impl true
